@@ -2,7 +2,6 @@ options(shiny.jquery.version=1)
 # remotes::install_github("MarkEdmondson1234/gentelellaShiny")
 library(gentelellaShiny)
 library(shiny)
-library(rhandsontable)
 
 data_tracksheet <- data.frame(
   GDMS = as.factor(""),
@@ -54,9 +53,44 @@ data_tracksheet <- data.frame(
   Project_Comment = as.character(""),
   Project_status = as.character(""),
   Potential_Savings = as.numeric(""),
-  Potential_Currency = as.character("")
+  Potential_Currency = as.character(""),
+  Actual_Savings = as.numeric(""),
+  Actual_Currency = as.character("")
 )
 
+
+data_gdms <- readRDS("D:/Pralhad/git_CostEstimator/gdms_data.RDS")
+
+track_path <- file.path("D:", "Pralhad", "git_CostEstimator", "track_data", fsep = "/")
+
+epochTime <- function() {
+  as.integer(Sys.time())
+}
+
+loadData <- function(path){
+  files <- list.files(file.path(path), full.names = T)
+  d <- purrr::map_df(files, readRDS)
+  
+}
+
+humanTime <- function() format(Sys.time(), "%Y%m%d-%H%M%OS")
+
+saveData <- function(data, path){
+  fileName <- sprintf("%s_%s.RDS", 
+                      humanTime(),
+                      digest::digest(data))
+  
+  saveRDS(data, file = file.path(path, fileName), ascii = T)
+}
+
+fieldsAll <- c("gdms", "project_pn", "project_rev", "project_description1", "project_description2", "project", "project_group",
+               "part_commodity", "part_subcommodity", "project_request", "project_owner", "date_request", "date_estimate", "date_actual",
+               "leadtime", "delays", "gdms_ear", "calc_ear", "project_plant", "ca_no", "supplier_region", "supplier_exworks",
+               "supplier_currency", "supplier_logistics", "supplier_landedcost", "supplier_landedcurrency", "supplier_name",
+               "region1", "exworks1", "currency1", "logistics1", "landedcost1", "landedcurrency1", "analysis_type","region2",
+               "exworks2", "currency2", "logistics2", "landedcost2", "landedcurrency2", "region3", "exworks3", "currency3", 
+               "logistics3", "landedcost3", "landedcurrency3", "project_comment", "project_status", 
+               "potential", "potential_currency", "actual_saving", "actual_currency")
 
 # Tracksheet Input Layout (Format : parameter_commodity_UI)
 
@@ -155,7 +189,10 @@ input_tracksheet_UI <- function(id) {
                offset = 4,
                actionButton(ns("project_save"), "Update Existing Part No.", style = "color: #fff; background-color: #26B99A; border-color: #26B99A")
         )
-      )
+        
+      ),
+      
+      uiOutput(ns("MainBody_trich")),actionButton(inputId = ns("Updated_trich"),label = "Save")
     )
   )
 }
@@ -169,7 +206,7 @@ table_tracksheet_UI <- function(id){
       width = 12,
       title = "Tracksheet Table",
       downloadButton(ns("tracksheet_download"), "Download.."),
-      # rHandsontableOutput(ns("track"))
+      DT::dataTableOutput(ns("table_tracksheet"))
     )
   )
 }
@@ -178,18 +215,203 @@ table_tracksheet_UI <- function(id){
 
 tracksheet_function <- function(input, output, session){
   
+  ns <- session$ns
+  
   ## Reactive GDMS data
   
   reactive_data <- reactive({
     
     req(input$project_pn, input$project_rev)
     
-    filter(data_gdms, PartNumber %in% input$project_pn & Revision %in% input$project_rev)
+    dplyr::filter(data_gdms, PartNumber == input$project_pn & Revision == input$project_rev)
+  })
+  
+  observeEvent(reactive_data(), {
+    
+    gdms <- reactive_data()
+    
+    descr1 <- as.character(gdms$DescriptionLine1[1])
+    
+    updateTextInput(session, "project_description1", value = descr1)
+    
+    descr2 <- as.character(gdms$DescriptionLine2[1])
+    
+    updateTextInput(session, "project_description2", value = descr2)
+    
+    proj <- as.character(gdms$ReleasingProjectNumber[1])
+    
+    updateTextInput(session, "project", value = proj)
+    
+    group <- as.character(gdms$PSI_GroupCode[1])
+    
+    updateTextInput(session, "project_group", value = group)
+    
+    com <- as.character(gdms$PSI_Commodity[1])
+    
+    updateTextInput(session, "part_commodity", value = com)
+    
+    subcom <- as.character(gdms$PSI_SubCommodity[1])
+    
+    updateTextInput(session, "part_subcommodity", value = subcom)
+    
+    exwork1 <- as.character(gdms$PSI_ShouldCost1ExWorks[1])
+    
+    updateTextInput(session, "exworks1", value = exwork1)
+    
+    curr1 <- as.character(gdms$PSI_ShouldCost1Currency[1])
+    
+    updateTextInput(session, "currency1", value = curr1)
+    
+    reg1 <- as.character(gdms$PSI_ShouldCost1Region[1])
+    
+    updateTextInput(session, "region1", value = reg1)
+    
+    exwork2 <- as.character(gdms$PSI_ShouldCost2ExWorks[1])
+    
+    updateTextInput(session, "exworks2", value = exwork2)
+    
+    curr2 <- as.character(gdms$PSI_ShouldCost2Currency[1])
+    
+    updateTextInput(session, "currency2", value = curr2)
+    
+    reg2 <- as.character(gdms$PSI_ShouldCost2Region[1])
+    
+    updateTextInput(session, "region2", value = reg2)
+    
+    exwork3 <- as.character(gdms$PSI_ShouldCost3ExWorks[1])
+    
+    updateTextInput(session, "exworks3", value = exwork3)
+    
+    curr3 <- as.character(gdms$PSI_ShouldCost3Currency[1])
+    
+    updateTextInput(session, "currency3", value = curr3)
+    
+    reg3 <- as.character(gdms$PSI_ShouldCost3Region[1])
+    
+    updateTextInput(session, "region3", value = reg3)
+    
   })
   
   
-  output$track1 <- renderRHandsontable({
-    rhandsontable(data_tracksheet, height = "100%") %>% hot_cols(colWidths = 150)
+  observeEvent(input$click, {
+    
+    tracksheet_neww <- data.frame(GDMS = as.character(input$gdms),
+                                  Part.No = as.character(input$project_pn),
+                                  Rev = as.character(input$project_rev),
+                                  Descr1 = as.character(input$project_description1),
+                                  Descr2 = as.character(input$project_description2),
+                                  Project = as.character(input$project),
+                                  Group = as.character(input$project_group),
+                                  Commodity = as.character(input$part_commodity),
+                                  Sub.Commodity = as.character(input$part_subcommodity),
+                                  Requestor = as.character(input$project_requestor),
+                                  Owner = as.character(input$project_owner),
+                                  Request.Date = input$date_request,
+                                  Estimated.Delivery = input$date_estimate,
+                                  Actual.Delivery = input$date_actual,
+                                  Lead.Time = as.character(input$leadtime),
+                                  Delays = as.character(input$delays),
+                                  GDMS.Ear = as.character(input$gdms_ear),
+                                  Calc.Ear = as.character(input$calc_ear),
+                                  Plant = as.character(input$project_plant),
+                                  CA.No = as.character(input$ca_no),
+                                  Supplier.Region = as.character(input$supplier_region),
+                                  Supplier.Exworks = as.character(input$supplier_exworks),
+                                  Supplier.Currency = as.character(input$supplier_currency),
+                                  Supplier.Logistics = as.character(input$supplier_logistics),
+                                  Supplier.Landed.Cost = as.character(input$supplier_landedcost),
+                                  Supplier.Landed.Currency = as.character(input$supplier_landedcurrency),
+                                  Supplier.Name = as.character(input$supplier_name),
+                                  Calc.Region1 = as.character(input$region1),
+                                  Calc.Exworks1 = as.character(input$exworks1),
+                                  Calc.Currency1 = as.character(input$currency1),
+                                  Calc.Logistics1 = as.character(input$logistics1),
+                                  Calc.Landed.Cost1 = as.character(input$landedcost1),
+                                  Calc.Landed.Currency1 = as.character(input$landedcurrency1),
+                                  Analysis.Type = as.character(input$analysis_type),
+                                  Calc.Region2 = as.character(input$region2),
+                                  Calc.Exworks2 = as.character(input$exworks2),
+                                  Calc.Currency2 = as.character(input$currency2),
+                                  Calc.Logistics2 = as.character(input$logistics2),
+                                  Calc.Landed.Cost2 = as.character(input$landedcost2),
+                                  Calc.Landed.Currency2 = as.character(input$landedcurrency2),
+                                  Calc.Region3 = as.character(input$region3),
+                                  Calc.Exworks3 = as.character(input$exworks3),
+                                  Calc.Currency3 = as.character(input$currency3),
+                                  Calc.Logistics3 = as.character(input$logistics3),
+                                  Calc.Landed.Cost3 = as.character(input$landedcost3),
+                                  Calc.Landed.Currency3 = as.character(input$landedcurrency3),
+                                  Project.Comment = as.character(input$project_comment),
+                                  Project.Status = as.character(input$project_status),
+                                  Potential.Savings = as.character(input$potential),
+                                  Potential.Currency = as.character(input$potential_currency),
+                                  Actual.Savings = as.character(input$actual_saving)
+    )
+    
+    saveData(tracksheet_neww, track_path)
+  })
+                                  
+  
+  # formData <- reactive({
+  #   data <- sapply(fieldsAll, function(x) input[[x]])
+  #   data <- c(data, timestamp = epochTime())
+  #   data <- t(data)
+  #   data
+  # })
+  # 
+  # observeEvent(input$click, {
+  #   saveData(formData(), track_path )
+  # })
+  # 
+  p <- loadData(track_path)
+  
+  output$table_tracksheet <- DT::renderDataTable(
+    p,
+    options = list(scrollX = TRUE),
+    class = 'cell-border stripe', 
+    editable = T
+  )
+  
+  
+  vals_trich<-reactiveValues()
+  vals_trich$Data <- p
+  
+  output$MainBody_trich<-renderUI({
+    fluidPage(
+      hr(),
+      column(12,dataTableOutput(ns("Main_table_trich")))
+    ) 
+  })
+  
+  
+  output$Main_table_trich<-renderDataTable({
+    DT=vals_trich$Data
+    datatable(DT,editable = TRUE, selection = "none") 
+  }, server = T )
+  
+  proxy = dataTableProxy('Main_table_trich')
+  
+  
+  observeEvent(input$Main_table_trich_cell_edit, {
+    
+    info = input$Main_table_trich_cell_edit
+    
+    str(info) 
+    i = info$row 
+    j = info$col 
+    v = info$value
+    
+    vals_trich$Data[i, j] <<- DT::coerceValue(v, vals_trich$Data[i, j]) 
+    replaceData(proxy, vals_trich$Data, resetPaging = FALSE) # important
+    
+    
+  })
+  
+  
+  ### save to RDS part 
+  observeEvent(input$Updated_trich,{
+    saveRDS(vals_trich$Data, "note.rds")
+    shinyalert(title = "Saved!", type = "success")
   })
   
   
